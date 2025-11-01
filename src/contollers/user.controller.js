@@ -81,7 +81,7 @@ const getUserByIdentification = async (req, res, next) => {
 
     // 2. Llamar a la capa de base de datos
     const targetUser = await getUserByIdentificationDb(identificacion);
-
+    console.log("tergetUser", targetUser)
     // 3. Manejar "No Encontrado"
     if (!targetUser) {
       const error = new Error('Usuario no encontrado.');
@@ -109,7 +109,69 @@ const getUserByIdentification = async (req, res, next) => {
   }
 };
 
+/**
+ * Controlador para actualizar parcialmente un usuario.
+ * Aplica lógica de seguridad:
+ * 1. Solo admin o el propio usuario pueden actualizar.
+ * 2. Solo admin puede cambiar el rol.
+ */
+const updateUser = async (req, res, next) => {
+  try {
+    // 1. Obtener datos de la solicitud
+    const { id: targetUserId } = req.params; // ID del usuario a modificar (de la URL)
+    const loggedInUser = req.user;          // Usuario logueado (del JWT)
+    const updateData = req.body;            // Campos a actualizar (del JSON)
+
+    // 2. Lógica de Autorización: "solo admin o cliente dueño"
+    const isAdmin = loggedInUser.role === ADMIN_ROL_ID;
+    const isOwner = loggedInUser.id === targetUserId;
+
+    if (!isAdmin && !isOwner) {
+      const error = new Error('Acceso denegado. No tienes permiso para modificar este recurso.');
+      error.statusCode = 403; // 403 Forbidden
+      return next(error);
+    }
+
+    // 3. Lógica de Negocio: Seguridad de Roles
+    // Si el que hace la petición NO es admin, borramos el campo 'rol' del body.
+    // Esto evita que un usuario normal se "promocione" a sí mismo a admin.
+    if (!isAdmin) {
+      delete updateData.rol;
+    }
+
+    // 4. Llamar a la capa de base de datos
+    // Pasamos solo los campos que el SP espera
+    const cleanUpdateData = {
+      nombre: updateData.nombre,
+      apellido: updateData.apellido,
+      correo: updateData.correo,
+      usuario: updateData.usuario,
+      rol: updateData.rol // Será 'undefined' si no es admin, y el SP lo tomará como NULL
+    };
+    
+    const success = await updateUserInDb(targetUserId, cleanUpdateData);
+
+    // 5. Manejar respuesta
+    if (!success) {
+      // El SP devolvió 'false' (WHERE id = p_user_id no encontró al usuario)
+      const error = new Error('Usuario no encontrado.');
+      error.statusCode = 404;
+      return next(error);
+    }
+
+    res.success(200, { message: 'Usuario actualizado exitosamente.' });
+
+  } catch (error) {
+    // 6. Manejar errores de unicidad del SP
+    if (error.message.includes('en uso')) {
+      error.statusCode = 409; // 409 Conflict
+    }
+    next(error); // Pasa al errorHandler
+  }
+};
+
 export default {
   createUser,
-  getUserByIdentification
+  getUserByIdentification,
+  updateUser
 };

@@ -60,3 +60,33 @@ export const getUserByIdentificationDb = async (identificacion) => {
     throw error;
   }
 };
+
+/**
+ * Llama al SP para actualizar parcialmente un usuario en la base de datos.
+ * @param {string} userId - El UUID del usuario a actualizar.
+ * @param {object} updateData - Objeto con los campos a actualizar (nombre, apellido, etc.)
+ * @returns {Promise<boolean>} El resultado del SP (true si actualizó, false si no).
+ */
+export const updateUserInDb = async (userId, updateData) => {
+  // El SP usa COALESCE, por lo que enviamos NULL para los campos no provistos.
+  const params = [
+    userId,
+    updateData.nombre || null,
+    updateData.apellido || null,
+    updateData.correo || null,
+    updateData.usuario || null,
+    updateData.rol || null
+  ];
+
+  try {
+    const { rows } = await callSP('sp_users_update', params);
+    // Devuelve el booleano del SP
+    return rows[0].sp_users_update;
+
+  } catch (error) {
+    // Si el SP lanza un RAISE EXCEPTION (ej: "correo ya en uso"),
+    // lo relanzamos para que el controlador principal lo maneje.
+    console.error('Error en sp_users_update:', error.message);
+    throw error;
+  }
+};

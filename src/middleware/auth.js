@@ -12,7 +12,7 @@ const verifyToken = (req, res, next) => {
     return next(error);
   }
 
-  jwt.verify(token, config.jwtSecret, (err, decoded) => {
+  jwt.verify(token, config.JWT_SECRET, (err, decoded) => {
     if (err) {
       const error = new Error('Forbidden: Invalid token');
       error.statusCode = 403;
@@ -32,4 +32,4 @@ const hasRole = (roles) => (req, res, next) => {
   next();
 };
 
-export { verifyToken, hasRole };
+export default { verifyToken, hasRole };
