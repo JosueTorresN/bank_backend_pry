@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import config from '../config/sentings.js';
 
 // Importa el nuevo controlador de DB en lugar de 'readData'
-import { findUserForLogin, createOtp } from '../db.controllers/auth.db.controller.js';
+import { findUserForLogin, createOtp, consumeOtp } from '../db.controllers/auth.db.controller.js';
 
 const login = async (req, res, next) => {
   const { username, password } = req.body;
@@ -48,17 +48,14 @@ const login = async (req, res, next) => {
   }
 };
 
+// En: src/controllers/auth.controller.js
+
 const forgotPassword = async (req, res, next) => {
   const { email } = req.body;
 
   try {
-    // 1. Buscamos al usuario para obtener su ID
-    // Reutilizamos 'findUserForLogin' que busca por email o username
     const user = await findUserForLogin(email);
 
-    // 2. IMPORTANTE: Seguridad
-    // Si el email no existe, NO informamos al cliente.
-    // Simplemente respondemos 200 OK para evitar que adivinen emails.
     if (!user) {
       console.log(`Intento de reseteo para email no registrado: ${email}`);
       return res.success(200, { 
@@ -67,40 +64,78 @@ const forgotPassword = async (req, res, next) => {
     }
 
     // 3. Generar un OTP (código numérico)
-    // Genera un número seguro de 6 dígitos (entre 100000 y 999999)
     const otp = crypto.randomInt(100000, 999999).toString();
-    const saltRounds = 10;
-    const hashedOtp = await bcrypt.hash(otp, saltRounds);
     
-    // 4. Definir parámetros del OTP
-    const otpPurpose = 'password_reset'; // Debe ser un valor en tu ENUM 'proposito_otp'
+    // 4. Hashear con SHA256 (¡ESTE ES EL CAMBIO!)
+    const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex');
+    
+    // 5. Definir parámetros del OTP
+    const otpPurpose = 'password_reset'; // Asegúrate que 'recuperacion' exista en tu ENUM
     const expiresInSeconds = 300; // 5 minutos
 
-    // 5. Guardar el HASH del OTP en la base de datos
+    // 6. Guardar el HASH del OTP en la base de datos
     await createOtp(
       user.user_id,
       otpPurpose,
       expiresInSeconds,
-      hashedOtp
+      hashedOtp // Se guarda el hash SHA256
     );
 
-    // 6. [PENDIENTE] Enviar el OTP por email
-    // Aquí deberías llamar a tu servicio de envío de correos
-    // (Este código es solo un ejemplo, necesitarás un servicio real)
+    // 7. [PENDIENTE] Enviar el OTP por email
     console.log(`--- SIMULACIÓN DE EMAIL ---`);
     console.log(`Enviando OTP a: ${email}`);
     console.log(`Código (no hasheado): ${otp}`);
     console.log(`---------------------------`);
-    // ej: await emailService.send(email, 'Tu código de recuperación', `Tu código es: ${otp}`);
-
-    // 7. Enviar respuesta exitosa genérica
+    
     res.success(200, { 
       message: 'Si existe una cuenta con este email, se ha enviado un código de recuperación.' 
     });
     
   } catch (error) {
-    next(error); // Envía cualquier error a tu 'errorHandler'
+    next(error);
   }
 };
 
-export default { login, forgotPassword };
+const verifyOtp = async (req, res, next) => {
+  // Asumo que el body enviará el email, el OTP (texto plano) y el propósito
+  const { email, otp, purpose } = req.body;
+
+  try {
+    // 1. Validar que el usuario exista
+    const user = await findUserForLogin(email);
+    if (!user) {
+      const error = new Error('OTP no válido o expirado.');
+      error.statusCode = 400;
+      return next(error);
+    }
+
+    // 2. Hashear el OTP (con SHA256 para que coincida con el SP)
+    const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex');
+
+    // 3. Intentar consumir el OTP
+    const isSuccess = await consumeOtp(
+      user.user_id,
+      purpose, // Ej: 'recuperacion'
+      hashedOtp
+    );
+
+    // 4. Verificar el resultado
+    if (!isSuccess) {
+      // El SP devolvió 'false' (OTP incorrecto, expirado o ya usado)
+      const error = new Error('OTP no válido o expirado.');
+      error.statusCode = 400;
+      return next(error);
+    }
+
+    // 5. Éxito
+    // En un flujo real, aquí generarías un token temporal para resetear la contraseña
+    res.success(200, {
+      message: 'OTP verificado exitosamente.'
+    });
+
+  } catch (error) {
+    next(error);
+  }
+};
+
+export default { login, forgotPassword, verifyOtp };

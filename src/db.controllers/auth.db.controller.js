@@ -46,3 +46,19 @@ export const createOtp = async (userId, purpose, expiresInSeconds, hashedCode) =
     throw new Error('Error al guardar el OTP en la base de datos.');
   }
 };
+
+export const consumeOtp = async (userId, purpose, hashedCode) => {
+  try {
+    const { rows } = await callSP(
+      'sp_otp_consume',
+      [userId, purpose, hashedCode]
+    );
+
+    // El SP devuelve un booleano (true si fue exitoso, false si no)
+    return rows[0].sp_otp_consume;
+
+  } catch (error) {
+    console.error('Error al ejecutar sp_otp_consume:', error);
+    throw new Error('Error al intentar consumir el OTP en la base de datos.');
+  }
+};
