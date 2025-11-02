@@ -33,6 +33,7 @@ const login = async (req, res, next) => {
     }
     console.log('Password is valid, generating token...', config.JWT_SECRET);
     // 4. Crea el token (usando los nombres de columna del SP)
+    console.log("Rol: ", user.rol)
     const tokenPayload = { id: user.user_id, role: user.rol };
     const token = jwt.sign(tokenPayload, config.JWT_SECRET, { expiresIn: '1h' });
     console.log('Generated token:', token);

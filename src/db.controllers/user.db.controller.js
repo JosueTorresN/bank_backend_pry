@@ -90,3 +90,22 @@ export const updateUserInDb = async (userId, updateData) => {
     throw error;
   }
 };
+
+/**
+ * Llama al SP para eliminar un usuario por su UUID.
+ * @param {string} userId - El UUID del usuario a eliminar.
+ * @returns {Promise<boolean>} El resultado del SP (true si eliminó, false si no).
+ */
+export const deleteUserInDb = async (userId) => {
+  try {
+    const { rows } = await callSP('sp_users_delete', [userId]);
+    // Devuelve el booleano del SP
+    return rows[0].sp_users_delete;
+
+  } catch (error) {
+    // Si hay un error (ej: violación de llave foránea si el SP no manejara cascada)
+    // lo relanzamos para que el controlador principal lo maneje.
+    console.error('Error en sp_users_delete:', error.message);
+    throw error;
+  }
+};

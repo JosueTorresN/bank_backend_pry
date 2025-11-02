@@ -1,5 +1,5 @@
 import bcrypt from 'bcrypt';
-import { createUserInDb, getUserByIdentificationDb } from '../db.controllers/user.db.controller.js'; // Importa la función de DB
+import { createUserInDb, getUserByIdentificationDb, updateUserInDb, deleteUserInDb } from '../db.controllers/user.db.controller.js'; // Importa la función de DB
 
 // Define el UUID de tu rol "Cliente" (basado en tu historial, usas este)
 const CLIENTE_ROL_ID = '10000000-0000-0000-0000-000000000002';
@@ -170,8 +170,53 @@ const updateUser = async (req, res, next) => {
   }
 };
 
+/**
+ * Controlador para eliminar un usuario.
+ * Aplica lógica de seguridad: solo un admin puede eliminar usuarios.
+ */
+const deleteUser = async (req, res, next) => {
+  try {
+    // 1. Obtener datos de la solicitud
+    const { id: targetUserId } = req.params; // ID del usuario a eliminar (de la URL)
+    const loggedInUser = req.user;          // Usuario logueado (del JWT)
+
+    // 2. Lógica de Autorización: "solo admin"
+    const isAdmin = loggedInUser.role === ADMIN_ROL_ID;
+
+    if (!isAdmin) {
+      const error = new Error('Acceso denegado. Solo los administradores pueden eliminar usuarios.');
+      error.statusCode = 403; // 403 Forbidden
+      return next(error);
+    }
+    
+    // 3. Opcional: Evitar que un admin se elimine a sí mismo
+    // if (loggedInUser.id === targetUserId) {
+    //   const error = new Error('Un administrador no puede eliminarse a sí mismo.');
+    //   error.statusCode = 400; // 400 Bad Request
+    //   return next(error);
+    // }
+
+    // 4. Llamar a la capa de base de datos
+    const success = await deleteUserInDb(targetUserId);
+
+    // 5. Manejar respuesta
+    if (!success) {
+      // El SP devolvió 'false' (WHERE id = p_user_id no encontró al usuario)
+      const error = new Error('Usuario no encontrado.');
+      error.statusCode = 404;
+      return next(error);
+    }
+
+    res.success(200, { message: 'Usuario eliminado exitosamente.' });
+
+  } catch (error) {
+    next(error); // Pasa al errorHandler
+  }
+};
+
 export default {
   createUser,
   getUserByIdentification,
-  updateUser
+  updateUser,
+  deleteUser
 };
