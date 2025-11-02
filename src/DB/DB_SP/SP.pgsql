@@ -679,11 +679,33 @@ BEGIN
 END;
 $$;
 
+-- 18. sp_cards_get_sensitive
+-- Devuelve SOLO los datos cifrados de una tarjeta específica
+CREATE OR REPLACE FUNCTION sp_cards_get_sensitive(
+  p_card_id UUID,
+  p_owner_id UUID -- Para validar propiedad
+)
+RETURNS TABLE (
+  cvv_encrypted TEXT,
+  pin_encrypted TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT t.cvv_hash, t.pin_hash
+  FROM tarjeta t
+  WHERE t.id = p_card_id AND t.usuario_id = p_owner_id;
+END;
+$$;
+
 -- ####################################################################
 -- #                      6. VALIDACIÓN Y AUDITORÍA                   #
 -- ####################################################################
 
--- 18. sp_bank_validate_account
+-- 19. sp_bank_validate_account
 --   - Asegura única fila (asuma constraint único en IBAN)
 CREATE OR REPLACE FUNCTION sp_bank_validate_account(
   p_iban VARCHAR
@@ -719,7 +741,7 @@ BEGIN
 END;
 $$;
 
--- 19. sp_audit_log
+-- 20. sp_audit_log
 CREATE OR REPLACE FUNCTION sp_audit_log(
   p_actor_user_id UUID DEFAULT NULL,
   p_accion VARCHAR DEFAULT NULL,
@@ -741,7 +763,7 @@ BEGIN
 END;
 $$;
 
--- 20. sp_audit_list_by_user
+-- 21. sp_audit_list_by_user
 CREATE OR REPLACE FUNCTION sp_audit_list_by_user(
   p_user_id UUID
 )
