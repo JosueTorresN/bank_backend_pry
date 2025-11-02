@@ -1,7 +1,6 @@
 import bcrypt from 'bcrypt';
-import { createUserInDb, getUserByIdentificationDb, updateUserInDb, deleteUserInDb } from '../db.controllers/user.db.controller.js'; // Importa la función de DB
+import { createUserInDb, getUserByIdentificationDb, updateUserInDb, deleteUserInDb } from '../db.controllers/user.db.controller.js';
 
-// Define el UUID de tu rol "Cliente" (basado en tu historial, usas este)
 const CLIENTE_ROL_ID = '10000000-0000-0000-0000-000000000002';
 const ADMIN_ROL_ID = '10000000-0000-0000-0000-000000000001'
 const SALT_ROUNDS = 10;
@@ -20,7 +19,7 @@ const createUser = async (req, res, next) => {
     telefono, 
     usuario, 
     password, // Recibe la contraseña en texto plano
-    rol,      // Opcional, para crear admin, etc.
+    rol, 
     fecha_nacimiento 
   } = req.body;
 
@@ -57,7 +56,6 @@ const createUser = async (req, res, next) => {
 
   } catch (error) {
     // 6. Manejar errores conocidos del SP (Errores 4xx)
-    // Estos son los mensajes de 'RAISE EXCEPTION' de tu SP
     if (error.message.includes('registrada') || error.message.includes('en uso')) {
       error.statusCode = 409; // 409 Conflict (recurso ya existe)
     } else if (error.message.includes('edad')) {
@@ -146,14 +144,13 @@ const updateUser = async (req, res, next) => {
       apellido: updateData.apellido,
       correo: updateData.correo,
       usuario: updateData.usuario,
-      rol: updateData.rol // Será 'undefined' si no es admin, y el SP lo tomará como NULL
+      rol: updateData.rol
     };
     
     const success = await updateUserInDb(targetUserId, cleanUpdateData);
 
     // 5. Manejar respuesta
     if (!success) {
-      // El SP devolvió 'false' (WHERE id = p_user_id no encontró al usuario)
       const error = new Error('Usuario no encontrado.');
       error.statusCode = 404;
       return next(error);

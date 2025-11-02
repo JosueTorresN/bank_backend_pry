@@ -8,7 +8,7 @@ import transferRoutes from './transfer.routes.js'
 import cardsRoutes from './cards.routes.js'
 import bankRoutes from './bank.route.js'
 
-const router = Router(); // Necesitas el router de Express para montar sub-rutas
+const router = Router();
 
 // 1. Importa los routers específicos (Asegúrate de que existan estos archivos)
 // const authRoutes = require('./auth.routes');
@@ -18,9 +18,9 @@ const router = Router(); // Necesitas el router de Express para montar sub-rutas
 // const transferRoutes = require('./transfers.routes');
 // const bankRoutes = require('./bank.routes');
 
-// --- Monta los Routers ---
+// --- Routers ---
 
-// 2. Monta los routers en sus rutas base (Ej: /api/v1/users, /api/v1/auth)
+// 2. routers en sus rutas base (Ej: /api/v1/users, /api/v1/auth)
 router.use('/auth', authRoutes); // Route: /api/v1/auth/...
 router.use('/users', usersRoutes); // Route: /api/v1/users/...
 router.use('/accounts', accountRoutes); // Route: /api/v1/accounts/...

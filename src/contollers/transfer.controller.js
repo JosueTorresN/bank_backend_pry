@@ -32,7 +32,7 @@ const createInternalTransfer = async (req, res, next) => {
       amount: numericAmount,
       currency,
       description,
-      userId // <-- ID del usuario autenticado (buena práctica)
+      userId
     };
     
     // 5. Llamar al controlador de DB
@@ -43,7 +43,6 @@ const createInternalTransfer = async (req, res, next) => {
 
   } catch (error) {
     // 7. Manejar Errores de Negocio (del RAISE EXCEPTION)
-    // Estos errores son esperados y deben ser 4xx
     
     // 400 Bad Request (Error del usuario)
     if (error.message.includes('monto') || error.message.includes('misma')) {

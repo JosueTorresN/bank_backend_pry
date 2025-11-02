@@ -1,12 +1,12 @@
-import 'dotenv/config'; // Sintaxis recomendada para dotenv
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import router from './routes/v1/index.js'; // Asegúrate de que v1 exporte con 'export default'
+import router from './routes/v1/index.js';
 import errorHandler from './middleware/errorHandler.js';
-import './config/db.js'; // Importa el archivo para que se ejecute
+import './config/db.js';
 import responseFormatter from './middleware/responseFormatter.js';
 
-// Importa la conexión a la BD
+
 import './config/db.js';
 
 const app = express();
@@ -24,14 +24,13 @@ app.use(cors({
     'Authorization'
   ],
   exposedHeaders: [
-    // Para que el frontend pueda leer este header con fetch
     'X-Total-Count'
   ],
-  credentials: false // ponlo true solo si vas a usar cookies/autenticación de origen cruzado
+  credentials: false
 }));
 
 app.use(express.json());
-app.use(responseFormatter); // Middleware para formatear respuestas
+app.use(responseFormatter);
 
 // Ruta de "salud" básica
 app.get('/', (req, res) => {

@@ -1,8 +1,7 @@
-import crypto from 'crypto'; // Para generar el IBAN de forma simulada
+import crypto from 'crypto';
 import { createAccountInDb, getAccountsFromDb, setAccountStatusInDb, getAccountMovementsFromDb } from '../db.controllers/account.db.controller.js';
 
-// --- BUENA PRÁCTICA: Define tus constantes ---
-// (Debes reemplazar este UUID por el que tengas en tu DB para "Activa")
+
 const ESTADO_CUENTA_ACTIVA_ID = '30000000-0000-0000-0000-000000000001';
 const PAIS_CODIGO = 'CR'; // Código de Costa Rica para el IBAN
 const BANCO_CODIGO = '0123'; // Código simulado de tu banco

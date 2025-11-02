@@ -1,4 +1,4 @@
-import { callSP } from '../config/db.js'; // Asegúrate que la ruta a tu config de DB sea correcta
+import { callSP } from '../config/db.js';
 
 /**
  * Busca un usuario por username o email para el proceso de login.

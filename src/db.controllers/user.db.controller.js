@@ -1,4 +1,4 @@
-import { callSP } from '../config/db.js'; // Asegúrate que la ruta a tu config de DB sea correcta
+import { callSP } from '../config/db.js';
 
 /**
  * Llama al SP para crear un nuevo usuario en la base de datos.

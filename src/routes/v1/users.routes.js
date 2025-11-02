@@ -2,12 +2,11 @@
 
 import { Router } from 'express';
 const router = Router();
-import { query, callSP, pool } from '../../config/db.js' // Asume que db.js está un nivel arriba
+import { query, callSP, pool } from '../../config/db.js' 
 import verifyApiKey from '../../middleware/apikey.js';
 import auth from '../../middleware/auth.js'
 import controller from '../../contollers/user.controller.js';
 import config from '../../config/sentings.js';
-// const bcrypt = require('bcrypt'); // Necesitarás instalar e importar bcrypt
 
 // Endpoint POST /api/v1/users
 router.post('/', verifyApiKey, controller.createUser);

@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import 'dotenv/config'; // Asegura que la clave esté cargada
+import 'dotenv/config';
 
 const algorithm = 'aes-256-cbc'; // Algoritmo estándar
 const secretKey = process.env.ENCRYPTION_KEY;

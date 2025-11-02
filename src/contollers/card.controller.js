@@ -1,5 +1,5 @@
 import bcrypt from 'bcrypt';
-import crypto from 'crypto'; // Para generación segura de números
+import crypto from 'crypto';
 import { createCardInDb, getCardsFromDb, getCardMovementsFromDb, addCardMovementInDb, getEncryptedCardDetailsFromDb } from '../db.controllers/card.db.controller.js';
 import { createOtp, consumeOtp } from '../db.controllers/auth.db.controller.js';
 import { encrypt, decrypt } from '../utils/crypto.service.js';
@@ -9,7 +9,7 @@ const TIPO_COMPRA_ID = '70000000-0000-0000-0000-000000000001';
 const TIPO_PAGO_ID   = '70000000-0000-0000-0000-000000000002';
 // 80000000-0000-0000-0000-000000000001 Credito
 // 80000000-0000-0000-0000-000000000002 Debito
-// --- Funciones de Generación (Helper functions) ---
+// --- Funciones de Generación ---
 
 // Simula la generación de un número de tarjeta (ej: Visa)
 const generateCardNumber = () => {
@@ -405,7 +405,7 @@ const viewCardDetails = async (req, res, next) => {
     // 2. Hashear el OTP para verificarlo
     const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex');
 
-    // 3. Consumir el OTP (Reutilizando el controlador de auth)
+    // 3. Consumir el OTP
     const isOtpValid = await consumeOtp(
       loggedInUser.id,
       OTP_PURPOSE_PIN,

@@ -70,7 +70,7 @@ const forgotPassword = async (req, res, next) => {
     const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex');
     
     // 5. Definir parámetros del OTP
-    const otpPurpose = 'password_reset'; // Asegúrate que 'recuperacion' exista en tu ENUM
+    const otpPurpose = 'password_reset';
     const expiresInSeconds = 300; // 5 minutos
 
     // 6. Guardar el HASH del OTP en la base de datos
@@ -128,7 +128,6 @@ const verifyOtp = async (req, res, next) => {
     }
 
     // 5. Éxito
-    // En un flujo real, aquí generarías un token temporal para resetear la contraseña
     res.success(200, {
       message: 'OTP verificado exitosamente.'
     });
