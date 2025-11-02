@@ -7,5 +7,6 @@ const router = Router();
 
 // Ruta de login
 router.post('/login', verifyApiKey, authController.login);
+router.post('/forgot-password', authController.forgotPassword)
 
 export default router;

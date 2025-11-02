@@ -6,7 +6,7 @@ import { callSP } from '../config/db.js'; // Asegúrate que la ruta a tu config 
  * @param {string} usernameOrEmail - El username o email del usuario.
  * @returns {Promise<object | null>} El objeto de usuario o null si no se encuentra.
  */
-const findUserForLogin = async (usernameOrEmail) => {
+export const findUserForLogin = async (usernameOrEmail) => {
   try {
     // Llamamos al SP que debe devolver: user_id, rol, contrasena_hash
     const { rows } = await callSP(
@@ -29,4 +29,20 @@ const findUserForLogin = async (usernameOrEmail) => {
   }
 };
 
-export { findUserForLogin };
+// Esta función guarda el hash del OTP en la base de datos
+export const createOtp = async (userId, purpose, expiresInSeconds, hashedCode) => {
+  try {
+    const { rows } = await callSP(
+      'sp_otp_create',
+      [userId, purpose, expiresInSeconds, hashedCode]
+    );
+    
+    // El SP devuelve el ID del OTP creado
+    return rows[0].sp_otp_create;
+
+  } catch (error) {
+    console.error('Error al ejecutar sp_otp_create:', error);
+    // Lanza el error para que el controlador principal lo maneje
+    throw new Error('Error al guardar el OTP en la base de datos.');
+  }
+};
