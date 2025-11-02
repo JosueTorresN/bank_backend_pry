@@ -1,5 +1,5 @@
 import crypto from 'crypto'; // Para generar el IBAN de forma simulada
-import { createAccountInDb, getAccountsFromDb, setAccountStatusInDb } from '../db.controllers/account.db.controller.js';
+import { createAccountInDb, getAccountsFromDb, setAccountStatusInDb, getAccountMovementsFromDb } from '../db.controllers/account.db.controller.js';
 
 // --- BUENA PRÁCTICA: Define tus constantes ---
 // (Debes reemplazar este UUID por el que tengas en tu DB para "Activa")
@@ -218,9 +218,79 @@ const setAccountStatus = async (req, res, next) => {
   }
 };
 
+/**
+ * Controlador para obtener los movimientos de una cuenta.
+ * Aplica lógica de "solo admin o cliente dueño" y maneja filtros/paginación.
+ */
+const getAccountMovements = async (req, res, next) => {
+  try {
+    // 1. Obtener datos de la solicitud
+    const { accountId } = req.params;     // ID de la cuenta (de la URL)
+    const loggedInUser = req.user;        // Usuario logueado (del JWT)
+
+    // 2. Lógica de Autorización: "solo admin o cliente dueño"
+    // Reutilizamos la lógica de getAccountById para validar permisos.
+    const isAdmin = loggedInUser.role === ADMIN_ROL_ID;
+    const ownerId = isAdmin ? null : loggedInUser.id;
+    
+    // Verificamos si la cuenta existe Y si el usuario tiene permiso para verla
+    const authorizedAccounts = await getAccountsFromDb(ownerId, accountId);
+    
+    if (authorizedAccounts.length === 0) {
+      const error = new Error('Cuenta no encontrada o no tienes permiso para verla.');
+      error.statusCode = 404;
+      return next(error);
+    }
+
+    // 3. Parsear Filtros y Paginación de la Query String
+    const { fromDate, toDate, type, q } = req.query;
+    const page = parseInt(req.query.page || '1', 10);
+    const pageSize = parseInt(req.query.pageSize || '10', 10);
+
+    // 4. Llamar a la capa de base de datos
+    const rows = await getAccountMovementsFromDb(accountId, {
+      fromDate, toDate, type, q, page, pageSize
+    });
+
+    // 5. Formatear Respuesta de Paginación
+    // Si no hay resultados, 'rows' será un array vacío
+    if (rows.length === 0) {
+      return res.success(200, {
+        pagination: { totalItems: 0, totalPages: 0, currentPage: page, pageSize },
+        data: []
+      });
+    }
+
+    // El SP nos da 'total_rows' en CADA fila. Lo tomamos de la primera.
+    const totalItems = parseInt(rows[0].total_rows, 10);
+    const totalPages = Math.ceil(totalItems / pageSize);
+
+    // Limpiamos la columna 'total_rows' de los datos que enviamos al cliente
+    const data = rows.map(r => {
+      delete r.total_rows;
+      return r;
+    });
+
+    // 6. Enviar respuesta exitosa
+    res.success(200, {
+      pagination: {
+        totalItems,
+        totalPages,
+        currentPage: page,
+        pageSize
+      },
+      data
+    });
+
+  } catch (error) {
+    next(error); // Pasa al errorHandler
+  }
+};
+
 export default {
   createAccount,
   getAccountById,
   getAccounts,
-  setAccountStatus
+  setAccountStatus,
+  getAccountMovements
 };

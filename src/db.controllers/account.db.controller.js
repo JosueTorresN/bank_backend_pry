@@ -79,3 +79,43 @@ export const setAccountStatusInDb = async (accountId, newStatusId) => {
     throw error;
   }
 };
+
+/**
+ * Llama al SP para obtener la lista de movimientos de una cuenta con filtros.
+ * @param {string} accountId - El UUID de la cuenta.
+ * @param {object} options - Objeto con los filtros y paginación.
+ * @returns {Promise<Array<object>>} Un array de movimientos (o vacío).
+ */
+export const getAccountMovementsFromDb = async (accountId, options = {}) => {
+  // Desestructura las opciones con valores por defecto
+  const {
+    fromDate = null,
+    toDate = null,
+    type = null,
+    q = null,
+    page = 1,
+    pageSize = 10
+  } = options;
+
+  // El orden DEBE coincidir con los argumentos del SP
+  const params = [
+    accountId,
+    fromDate,
+    toDate,
+    type,
+    q,
+    page,
+    pageSize
+  ];
+
+  try {
+    const { rows } = await callSP('sp_account_movements_list', params);
+    // Devuelve el array de movimientos.
+    // Cada fila incluirá la columna 'total_rows'.
+    return rows;
+
+  } catch (error) {
+    console.error('Error en sp_account_movements_list:', error.message);
+    throw new Error('Error al obtener movimientos de la base de datos.');
+  }
+};
