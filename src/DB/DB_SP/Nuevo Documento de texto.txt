@@ -1,0 +1,645 @@
+-- ####################################################################
+-- #                       FUNCIÓN AUXILIAR                           #
+-- ####################################################################
+
+-- Función auxiliar Calcular Edad
+CREATE OR REPLACE FUNCTION calcular_edad(p_fecha_nacimiento DATE)
+RETURNS INTEGER AS $$
+BEGIN
+    RETURN DATE_PART('year', AGE(NOW(), p_fecha_nacimiento));
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+
+-- ####################################################################
+-- #                      1. AUTENTICACIÓN Y OTP                      #
+-- ####################################################################
+
+-- 1. sp_auth_user_get_by_username_or_email
+CREATE OR REPLACE FUNCTION sp_auth_user_get_by_username_or_email(
+    p_username_or_email TEXT
+)
+RETURNS TABLE (
+    user_id UUID,
+    contrasena_hash TEXT,
+    rol UUID
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        u.id,
+        u.contrasena_hash,
+        u.rol
+    FROM
+        usuario u
+    WHERE
+        u.usuario = p_username_or_email OR u.correo = p_username_or_email;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 2. sp_api_key_is_active
+CREATE OR REPLACE FUNCTION sp_api_key_is_active(
+    p_api_key_hash TEXT
+)
+RETURNS BOOLEAN AS $$
+DECLARE
+    v_is_active BOOLEAN;
+BEGIN
+    SELECT activa INTO v_is_active
+    FROM apiKey
+    WHERE clave_hash = p_api_key_hash;
+
+    RETURN COALESCE(v_is_active, FALSE);
+END;
+$$ LANGUAGE plpgsql;
+
+-- 3. sp_otp_create
+CREATE OR REPLACE FUNCTION sp_otp_create(
+    p_user_id UUID,
+    p_proposito proposito_otp,
+    p_expires_in_seconds INTEGER,
+    p_codigo_hash TEXT
+)
+RETURNS UUID AS $$
+DECLARE
+    v_otp_id UUID := gen_random_uuid(); -- Corregido: Asignación inicial
+BEGIN
+    INSERT INTO otps (id, usuario_id, codigo_hash, proposito, fecha_expiracion)
+    VALUES (
+        v_otp_id, 
+        p_user_id, 
+        p_codigo_hash, 
+        p_proposito, 
+        NOW() + (p_expires_in_seconds || ' seconds')::INTERVAL
+    );
+
+    RETURN v_otp_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 4. sp_otp_consume
+CREATE OR REPLACE FUNCTION sp_otp_consume(
+    p_user_id UUID,
+    p_proposito proposito_otp,
+    p_codigo_hash TEXT
+)
+RETURNS BOOLEAN AS $$
+DECLARE
+    v_consumed BOOLEAN := FALSE; -- Corregido: Asignación inicial
+BEGIN
+    UPDATE otps
+    SET fecha_consumido = NOW()
+    WHERE
+        usuario_id = p_user_id
+        AND proposito = p_proposito
+        AND codigo_hash = p_codigo_hash
+        AND fecha_expiracion > NOW()
+        AND fecha_consumido IS NULL
+    RETURNING TRUE INTO v_consumed;
+
+    RETURN COALESCE(v_consumed, FALSE);
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- ####################################################################
+-- #                            2. USUARIOS                           #
+-- ####################################################################
+
+-- 5. sp_users_create (Incluye validación de edad >= 18 y unicidad)
+CREATE OR REPLACE FUNCTION sp_users_create(
+    p_tipo_identificacion UUID,
+    p_identificacion VARCHAR,
+    p_nombre VARCHAR,
+    p_apellido VARCHAR,
+    p_correo VARCHAR,
+    p_telefono VARCHAR,
+    p_usuario VARCHAR,
+    p_contrasena_hash TEXT,
+    p_rol UUID,
+    p_fecha_nacimiento DATE
+)
+RETURNS UUID AS $$
+DECLARE
+    v_user_id UUID := gen_random_uuid(); -- Corregido: Asignación inicial
+BEGIN
+    -- VALIDACIÓN 1 EDAD MÍNIMA DE 18 AÑOS
+    IF calcular_edad(p_fecha_nacimiento) < 18 THEN -- Corregido: operador < faltante
+        RAISE EXCEPTION 'El usuario debe tener al menos 18 años de edad.';
+    END IF;
+
+    -- VALIDACIÓN 2 UNICIDAD
+    IF EXISTS (SELECT 1 FROM usuario WHERE identificacion = p_identificacion) THEN
+        RAISE EXCEPTION 'Identificación ya registrada.';
+    END IF;
+    IF EXISTS (SELECT 1 FROM usuario WHERE correo = p_correo) THEN
+        RAISE EXCEPTION 'Correo ya registrado.';
+    END IF;
+    IF EXISTS (SELECT 1 FROM usuario WHERE usuario = p_usuario) THEN
+        RAISE EXCEPTION 'Nombre de usuario ya en uso.';
+    END IF;
+
+    INSERT INTO usuario (
+        id, tipo_identificacion, identificacion, nombre, apellido, correo, telefono, usuario, contrasena_hash, rol
+    )
+    VALUES (
+        v_user_id, p_tipo_identificacion, p_identificacion, p_nombre, p_apellido, p_correo, p_telefono, p_usuario, p_contrasena_hash, p_rol
+    );
+
+    RETURN v_user_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 6. sp_users_get_by_identification
+CREATE OR REPLACE FUNCTION sp_users_get_by_identification(
+    p_identificacion VARCHAR
+)
+RETURNS TABLE (
+    id UUID,
+    nombre VARCHAR,
+    apellido VARCHAR,
+    correo VARCHAR,
+    usuario VARCHAR,
+    rol UUID
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        u.id,
+        u.nombre,
+        u.apellido,
+        u.correo,
+        u.usuario,
+        u.rol
+    FROM
+        usuario u
+    WHERE
+        u.identificacion = p_identificacion;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 7. sp_users_update
+CREATE OR REPLACE FUNCTION sp_users_update(
+    p_user_id UUID,
+    p_nombre VARCHAR DEFAULT NULL,
+    p_apellido VARCHAR DEFAULT NULL,
+    p_correo VARCHAR DEFAULT NULL,
+    p_usuario VARCHAR DEFAULT NULL,
+    p_rol UUID DEFAULT NULL
+)
+RETURNS BOOLEAN AS $$
+DECLARE
+    v_updated BOOLEAN := FALSE; -- Corregido: Asignación inicial
+BEGIN
+    -- Validaciones de unicidad para campos opcionales
+    IF p_correo IS NOT NULL AND EXISTS (SELECT 1 FROM usuario WHERE correo = p_correo AND id != p_user_id) THEN
+        RAISE EXCEPTION 'El nuevo correo ya está en uso.';
+    END IF;
+    IF p_usuario IS NOT NULL AND EXISTS (SELECT 1 FROM usuario WHERE usuario = p_usuario AND id != p_user_id) THEN
+        RAISE EXCEPTION 'El nuevo nombre de usuario ya está en uso.';
+    END IF;
+
+    UPDATE usuario
+    SET
+        nombre = COALESCE(p_nombre, nombre),
+        apellido = COALESCE(p_apellido, apellido),
+        correo = COALESCE(p_correo, correo),
+        usuario = COALESCE(p_usuario, usuario),
+        rol = COALESCE(p_rol, rol),
+        fecha_actualizacion = NOW()
+    WHERE id = p_user_id
+    RETURNING TRUE INTO v_updated;
+
+    RETURN v_updated;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 8. sp_users_delete
+CREATE OR REPLACE FUNCTION sp_users_delete(
+    p_user_id UUID
+)
+RETURNS BOOLEAN AS $$
+DECLARE
+    v_deleted BOOLEAN := FALSE; -- Corregido: Asignación inicial
+BEGIN
+    -- Asume que las FKs tienen ON DELETE CASCADE para eliminar registros dependientes.
+    DELETE FROM usuario WHERE id = p_user_id
+    RETURNING TRUE INTO v_deleted;
+
+    RETURN v_deleted;
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- ####################################################################
+-- #                            3. CUENTAS Y MOVS                     #
+-- ####################################################################
+
+-- 9. sp_accounts_create
+CREATE OR REPLACE FUNCTION sp_accounts_create(
+    p_usuario_id UUID,
+    p_iban VARCHAR,
+    p_alias VARCHAR,
+    p_tipo UUID,
+    p_moneda UUID,
+    p_saldo_inicial DECIMAL,
+    p_estado UUID
+)
+RETURNS UUID AS $$
+DECLARE
+    v_account_id UUID := gen_random_uuid(); -- Corregido: Asignación inicial
+BEGIN
+    INSERT INTO cuenta (id, usuario_id, iban, alias, tipoCuenta, moneda, saldo, estado)
+    VALUES (v_account_id, p_usuario_id, p_iban, p_alias, p_tipo, p_moneda, p_saldo_inicial, p_estado);
+
+    RETURN v_account_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 10. sp_accounts_get
+CREATE OR REPLACE FUNCTION sp_accounts_get(
+    p_owner_id UUID DEFAULT NULL,
+    p_account_id UUID DEFAULT NULL
+)
+RETURNS TABLE (
+    id UUID,
+    usuario_id UUID,
+    iban VARCHAR,
+    alias VARCHAR,
+    tipoCuenta UUID,
+    moneda UUID,
+    saldo DECIMAL,
+    estado UUID,
+    fecha_creacion TIMESTAMP
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT c.id, c.usuario_id, c.iban, c.alias, c.tipoCuenta, c.moneda, c.saldo, c.estado, c.fecha_creacion
+    FROM cuenta c
+    WHERE
+        (p_account_id IS NULL AND c.usuario_id = p_owner_id)
+        OR (p_account_id IS NOT NULL AND c.id = p_account_id AND (p_owner_id IS NULL OR c.usuario_id = p_owner_id));
+END;
+$$ LANGUAGE plpgsql;
+
+-- 11. sp_accounts_set_status
+CREATE OR REPLACE FUNCTION sp_accounts_set_status(
+    p_account_id UUID,
+    p_nuevo_estado UUID
+)
+RETURNS BOOLEAN AS $$
+DECLARE
+    v_updated BOOLEAN := FALSE; -- Corregido: Asignación inicial
+    v_saldo DECIMAL;
+    v_cerrada_id UUID;
+BEGIN
+    -- *** ADAPTAR: Ajusta el nombre si no es 'Cerrada' ***
+    SELECT id INTO v_cerrada_id FROM estadoCuenta WHERE nombre = 'Cerrada'; 
+
+    IF p_nuevo_estado = v_cerrada_id THEN
+        SELECT saldo INTO v_saldo FROM cuenta WHERE id = p_account_id;
+        IF v_saldo != 0.00 THEN
+            RAISE EXCEPTION 'No se puede cerrar una cuenta con saldo distinto de cero.';
+        END IF;
+    END IF;
+
+    UPDATE cuenta
+    SET estado = p_nuevo_estado, fecha_actualizacion = NOW()
+    WHERE id = p_account_id
+    RETURNING TRUE INTO v_updated;
+
+    RETURN v_updated;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 12. sp_account_movements_list
+CREATE OR REPLACE FUNCTION sp_account_movements_list(
+    p_account_id UUID,
+    p_from_date TIMESTAMP DEFAULT NULL,
+    p_to_date TIMESTAMP DEFAULT NULL,
+    p_type UUID DEFAULT NULL,
+    p_q TEXT DEFAULT NULL,
+    p_page INTEGER DEFAULT 1,
+    p_page_size INTEGER DEFAULT 10
+)
+RETURNS TABLE (
+    id UUID,
+    cuenta_id UUID,
+    fecha TIMESTAMP,
+    tipo UUID,
+    descripcion VARCHAR,
+    moneda UUID,
+    monto DECIMAL,
+    total_rows BIGINT
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        m.id, m.cuenta_id, m.fecha, m.tipo, m.descripcion, m.moneda, m.monto,
+        COUNT(*) OVER() AS total_rows
+    FROM
+        movimientoCuenta m
+    WHERE
+        m.cuenta_id = p_account_id
+        AND (p_from_date IS NULL OR m.fecha >= p_from_date) -- Corregido: operador >= faltante
+        AND (p_to_date IS NULL OR m.fecha <= p_to_date)   -- Corregido: operador <= faltante
+        AND (p_type IS NULL OR m.tipo = p_type)
+        AND (p_q IS NULL OR m.descripcion ILIKE '%' || p_q || '%') -- Corregido: operador || faltante
+    ORDER BY m.fecha DESC
+    LIMIT p_page_size
+    OFFSET (p_page - 1) * p_page_size; -- Corregido: operador * faltante
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- ####################################################################
+-- #                         4. TRANSFERENCIAS                        #
+-- ####################################################################
+
+-- 13. sp_transfer_create_internal (CORREGIDO)
+CREATE OR REPLACE FUNCTION sp_transfer_create_internal(
+    p_from_account_id UUID,
+    p_to_account_id UUID,
+    p_amount DECIMAL,
+    p_currency UUID,
+    p_description VARCHAR,
+    p_user_id UUID
+)
+RETURNS TABLE (
+    transfer_id UUID,
+    receipt_number TEXT,
+    status TEXT
+) AS $$
+DECLARE
+    v_transfer_id UUID := gen_random_uuid();
+    v_status TEXT := 'COMPLETED';
+    v_current_balance DECIMAL;
+    v_tipo_debito UUID;
+    v_tipo_credito UUID;
+BEGIN
+    -- *** Lógica de negocio para Transferencia (Validación y Transacción) ***
+    SELECT id INTO v_tipo_debito FROM tipoMovimientoCuenta WHERE nombre = 'Debito';
+    SELECT id INTO v_tipo_credito FROM tipoMovimientoCuenta WHERE nombre = 'Crédito';
+
+    -- 1. Validar propiedad y bloquear fila origen
+    SELECT saldo INTO v_current_balance
+    FROM cuenta
+    WHERE id = p_from_account_id AND usuario_id = p_user_id
+    FOR UPDATE;
+
+    IF v_current_balance IS NULL THEN
+        RAISE EXCEPTION 'Cuenta origen no encontrada o no pertenece al usuario.';
+    END IF;
+
+    IF v_current_balance < p_amount THEN
+        RAISE EXCEPTION 'Saldo insuficiente en la cuenta origen.';
+    END IF;
+    
+    IF NOT EXISTS (SELECT 1 FROM cuenta WHERE id = p_to_account_id) THEN
+        RAISE EXCEPTION 'La cuenta destino no existe.';
+    END IF;
+
+    -- a. Débito en origen
+    UPDATE cuenta SET saldo = saldo - p_amount, fecha_actualizacion = NOW() WHERE id = p_from_account_id;
+    INSERT INTO movimientoCuenta (id, cuenta_id, fecha, tipo, descripcion, moneda, monto)
+    VALUES (gen_random_uuid(), p_from_account_id, NOW(), v_tipo_debito, 'Transferencia enviada: ' || p_description, p_currency, p_amount);
+
+    -- b. Crédito en destino
+    UPDATE cuenta SET saldo = saldo + p_amount, fecha_actualizacion = NOW() WHERE id = p_to_account_id;
+    INSERT INTO movimientoCuenta (id, cuenta_id, fecha, tipo, descripcion, moneda, monto)
+    VALUES (gen_random_uuid(), p_to_account_id, NOW(), v_tipo_credito, 'Transferencia recibida: ' || p_description, p_currency, p_amount);
+
+    -- Corregido: Eliminando los paréntesis de la lista de valores
+    RETURN NEXT v_transfer_id, 'REC-' || to_char(NOW(), 'YYYYMMDDHHMISS'), v_status;
+    RETURN; -- Se añade RETURN para finalizar la función que devuelve una tabla
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- ####################################################################
+-- #                           5. TARJETAS                            #
+-- ####################################################################
+
+-- 14. sp_cards_create
+CREATE OR REPLACE FUNCTION sp_cards_create(
+    p_usuario_id UUID,
+    p_tipo UUID,
+    p_numero_enmascarado VARCHAR,
+    p_fecha_expiracion CHAR,
+    p_cvv_encriptado TEXT,
+    p_pin_encriptado TEXT,
+    p_moneda UUID,
+    p_limite_credito DECIMAL,
+    p_saldo_actual DECIMAL
+)
+RETURNS UUID AS $$
+DECLARE
+    v_card_id UUID := gen_random_uuid(); -- Corregido: Asignación inicial
+BEGIN
+    INSERT INTO tarjeta (id, usuario_id, tipo, numero_enmascarado, fecha_expiracion, cvv_hash, pin_hash, moneda, limite_credito, saldo_actual)
+    VALUES (v_card_id, p_usuario_id, p_tipo, p_numero_enmascarado, p_fecha_expiracion, p_cvv_encriptado, p_pin_encriptado, p_moneda, p_limite_credito, p_saldo_actual);
+
+    RETURN v_card_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 15. sp_cards_get (No devuelve PIN/CVV hash)
+CREATE OR REPLACE FUNCTION sp_cards_get(
+    p_owner_id UUID DEFAULT NULL,
+    p_card_id UUID DEFAULT NULL
+)
+RETURNS TABLE (
+    id UUID,
+    usuario_id UUID,
+    tipo UUID,
+    numero_enmascarado VARCHAR,
+    fecha_expiracion CHAR,
+    moneda UUID,
+    limite_credito DECIMAL,
+    saldo_actual DECIMAL
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT t.id, t.usuario_id, t.tipo, t.numero_enmascarado, t.fecha_expiracion, t.moneda, t.limite_credito, t.saldo_actual
+    FROM tarjeta t
+    WHERE
+        (p_card_id IS NULL AND t.usuario_id = p_owner_id)
+        OR (p_card_id IS NOT NULL AND t.id = p_card_id AND (p_owner_id IS NULL OR t.usuario_id = p_owner_id));
+END;
+$$ LANGUAGE plpgsql;
+
+-- 16. sp_card_movements_list
+CREATE OR REPLACE FUNCTION sp_card_movements_list(
+    p_card_id UUID,
+    p_from_date TIMESTAMP DEFAULT NULL,
+    p_to_date TIMESTAMP DEFAULT NULL,
+    p_type UUID DEFAULT NULL,
+    p_q TEXT DEFAULT NULL,
+    p_page INTEGER DEFAULT 1,
+    p_page_size INTEGER DEFAULT 10
+)
+RETURNS TABLE (
+    id UUID,
+    tarjeta_id UUID,
+    fecha TIMESTAMP,
+    tipo UUID,
+    descripcion VARCHAR,
+    moneda UUID,
+    monto DECIMAL,
+    total_rows BIGINT
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        m.id, m.tarjeta_id, m.fecha, m.tipo, m.descripcion, m.moneda, m.monto,
+        COUNT(*) OVER() AS total_rows
+    FROM
+        movimientoTarjeta m
+    WHERE
+        m.tarjeta_id = p_card_id
+        AND (p_from_date IS NULL OR m.fecha >= p_from_date) -- Corregido: operador >= faltante
+        AND (p_to_date IS NULL OR m.fecha <= p_to_date)   -- Corregido: operador <= faltante
+        AND (p_type IS NULL OR m.tipo = p_type)
+        AND (p_q IS NULL OR m.descripcion ILIKE '%' || p_q || '%') -- Corregido: operador || faltante
+    ORDER BY m.fecha DESC
+    LIMIT p_page_size
+    OFFSET (p_page - 1) * p_page_size; -- Corregido: operador * faltante
+END;
+$$ LANGUAGE plpgsql;
+
+-- 17. sp_card_movement_add (CORREGIDO)
+CREATE OR REPLACE FUNCTION sp_card_movement_add(
+    p_card_id UUID,
+    p_fecha TIMESTAMP,
+    p_tipo UUID,
+    p_descripcion VARCHAR,
+    p_moneda UUID,
+    p_monto DECIMAL
+)
+RETURNS TABLE (
+    movement_id UUID,
+    nuevo_saldo_tarjeta DECIMAL
+) AS $$
+DECLARE
+    v_movement_id UUID := gen_random_uuid();
+    v_nuevo_saldo DECIMAL;
+    v_limite_credito DECIMAL;
+    v_saldo_actual DECIMAL;
+    v_tipo_compra UUID;
+BEGIN
+    -- *** Lógica de negocio para Tarjetas (Validación de Límite) ***
+    SELECT id INTO v_tipo_compra FROM tipoMovimientoTarjeta WHERE nombre = 'Compra';
+
+    SELECT limite_credito, saldo_actual INTO v_limite_credito, v_saldo_actual
+    FROM tarjeta
+    WHERE id = p_card_id
+    FOR UPDATE;
+
+    IF p_tipo = v_tipo_compra THEN
+        IF (v_saldo_actual + p_monto) > v_limite_credito THEN
+            RAISE EXCEPTION 'Límite de crédito excedido. Monto utilizado: %', v_saldo_actual + p_monto;
+        END IF;
+    END IF;
+
+    INSERT INTO movimientoTarjeta (id, tarjeta_id, fecha, tipo, descripcion, moneda, monto)
+    VALUES (v_movement_id, p_card_id, p_fecha, p_tipo, p_descripcion, p_moneda, p_monto);
+
+    UPDATE tarjeta
+    SET saldo_actual = v_saldo_actual + p_monto, fecha_actualizacion = NOW()
+    WHERE id = p_card_id
+    RETURNING saldo_actual INTO v_nuevo_saldo;
+
+    -- Corregido: Eliminando los paréntesis de la lista de valores
+    RETURN NEXT v_movement_id, v_nuevo_saldo;
+    RETURN;
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- ####################################################################
+-- #                      6. VALIDACIÓN Y AUDITORÍA                   #
+-- ####################################################################
+
+-- 18. sp_bank_validate_account (CORREGIDO)
+CREATE OR REPLACE FUNCTION sp_bank_validate_account(
+    p_iban VARCHAR
+)
+RETURNS TABLE (
+    "exists" BOOLEAN,
+    owner_name TEXT,
+    owner_id UUID
+) AS $$
+DECLARE
+    v_exists BOOLEAN := FALSE;
+    v_owner_name TEXT := NULL;
+    v_owner_id UUID := NULL;
+BEGIN
+    -- *** Lógica de negocio para Validación de Cuentas ***
+    SELECT
+        TRUE,
+        u.nombre || ' ' || u.apellido,
+        u.id
+    INTO
+        v_exists,
+        v_owner_name,
+        v_owner_id
+    FROM
+        cuenta c
+    JOIN
+        usuario u ON c.usuario_id = u.id
+    WHERE c.iban = p_iban;
+
+    -- Corregido: Eliminando los paréntesis de la lista de valores
+    IF v_owner_id IS NULL THEN
+        RETURN NEXT FALSE, NULL, NULL;
+    ELSE
+        RETURN NEXT v_exists, v_owner_name, v_owner_id;
+    END IF;
+    RETURN;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 19. sp_audit_log (Opcional/Puntos Extra)
+CREATE OR REPLACE FUNCTION sp_audit_log(
+    p_actor_user_id UUID DEFAULT NULL,
+    p_accion VARCHAR,
+    p_detalles_json JSONB
+)
+RETURNS INTEGER AS $$
+DECLARE
+    v_audit_id INTEGER;
+BEGIN
+    INSERT INTO auditoria (usuario_id, accion, detalles)
+    VALUES (p_actor_user_id, p_accion, p_detalles_json)
+    RETURNING id INTO v_audit_id;
+
+    RETURN v_audit_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 20. sp_audit_list_by_user (Opcional/Puntos Extra)
+CREATE OR REPLACE FUNCTION sp_audit_list_by_user(
+    p_user_id UUID
+)
+RETURNS TABLE (
+    id INTEGER,
+    usuario_id UUID,
+    accion VARCHAR,
+    detalles JSONB,
+    fecha TIMESTAMP
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        a.id,
+        a.usuario_id,
+        a.accion,
+        a.detalles,
+        a.fecha
+    FROM
+        auditoria a
+    WHERE
+        a.usuario_id = p_user_id
+    ORDER BY a.fecha DESC;
+END;
+$$ LANGUAGE plpgsql;
