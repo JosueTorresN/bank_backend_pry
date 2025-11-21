@@ -12,18 +12,20 @@ const validateAccount = async (req, res, next) => {
     const { iban } = req.body;
 
     // 2. Validación de Entrada
-    if (!iban) {
-      const error = new Error('El campo "iban" es requerido.');
-      error.statusCode = 400;
-      return next(error);
+    const IBAN_REGEX = /^CR\d{2}[A-Z0-9]{18}$/;
+
+    if (!iban || !IBAN_REGEX.test(iban)) {
+      return res.status(400).json({
+        error: 'INVALID_ACCOUNT_FORMAT',
+        message: 'El formato del iban no es válido.'
+      });
     }
-    
+
     // 3. Llamar a la capa de base de datos
     const result = await validateAccountInDb(iban);
 
-    // 4. Enviar respuesta exitosa
-    // El 'result' ya tiene el formato { exists, owner_name, owner_id }
-    res.success(200, result);
+    // 4. Enviar respuesta exitosa con el contrato esperado
+    res.status(200).json(result);
 
   } catch (error) {
     next(error); // Pasa al errorHandler
