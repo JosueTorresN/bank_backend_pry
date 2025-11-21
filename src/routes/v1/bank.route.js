@@ -1,10 +1,9 @@
 import bankController from '../../contollers/bank.controller.js';
-import verifyApiKey from '../../middleware/apikey.js';
-import config from '../../config/sentings.js';
-import auth from '../../middleware/auth.js'
 import { Router } from 'express';
+import centralBankAuth from '../../middleware/centralBankAuth.js';
+
 const router = Router();
 
-router.post('/validate-account', verifyApiKey, auth.verifyToken, bankController.validateAccount);
+router.post('/validate-account', centralBankAuth, bankController.validateAccount);
 
 export default router;
