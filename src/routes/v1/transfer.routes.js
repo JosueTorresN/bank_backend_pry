@@ -7,5 +7,6 @@ import { Router } from 'express';
 const router = Router();
 
 router.post('/internal', verifyApiKey, auth.verifyToken, transferController.createInternalTransfer)
+router.post('/interbank', verifyApiKey, auth.verifyToken, transferController.createInterbankTransfer);
 
-export default router
+export default router;
