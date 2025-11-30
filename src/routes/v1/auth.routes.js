@@ -6,6 +6,7 @@ import { Router } from 'express';
 const router = Router();
 
 // Ruta de login
+console.log("Si pasa por auth");
 router.post('/login', verifyApiKey, authController.login);
 router.post('/forgot-password', authController.forgotPassword);
 router.post('/verify-otp', authController.verifyOtp);
