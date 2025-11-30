@@ -126,13 +126,15 @@ const getAccounts = async (req, res, next) => {
  * Aplica la lógica de "solo admin o cliente dueño".
  */
 const getAccountById = async (req, res, next) => {
-
+  
   try {
     // 1. Obtener datos de la solicitud
     const { id: accountId } = req.params;     // ID de la cuenta (de la URL)
+    console.log("parametro >>>"+req.params.id)
     const loggedInUser = req.user;            // Usuario logueado (del JWT)
 
     // 2. Lógica de Autorización: "solo admin o cliente dueño"
+    
     const isAdmin = loggedInUser.role === ADMIN_ROL_ID;
     
     // Si es admin, pasamos ownerId = null (para que el SP no filtre por dueño).
@@ -141,8 +143,9 @@ const getAccountById = async (req, res, next) => {
     const ownerId = loggedInUser.id;
 
     // 3. Llamar a la capa de base de datos
+    
     const accounts = await getAccountsFromDb(ownerId, accountId);
-
+    
     // 4. Manejar "No Encontrado"
     // Si el array está vacío, significa que:
     // a) La cuenta no existe (404).
@@ -153,10 +156,18 @@ const getAccountById = async (req, res, next) => {
       error.statusCode = 404;
       return next(error);
     }
-
+    
     // 5. Enviar respuesta exitosa
     // El SP devuelve un array, pero solo queremos el primer (y único) elemento.
-    res.success(200, accounts[0]);
+    foundAccount = null;
+    for (const acc of accounts) {
+      if (acc.id.toString() === accountId) {
+        foundAccount = acc;
+        break; 
+      }
+    }
+    
+    res.success(200, foundAccount);
 
   } catch (error) {
     next(error); // Pasa al errorHandler
