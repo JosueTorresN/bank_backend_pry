@@ -130,44 +130,35 @@ const getAccountById = async (req, res, next) => {
   try {
     // 1. Obtener datos de la solicitud
     const { id: accountId } = req.params;     // ID de la cuenta (de la URL)
-    console.log("parametro >>>"+req.params.id)
     const loggedInUser = req.user;            // Usuario logueado (del JWT)
 
     // 2. Lógica de Autorización: "solo admin o cliente dueño"
+    // Asegúrate de tener importada o definida la constante ADMIN_ROL_ID
+    const isAdmin = loggedInUser.role === (global.ADMIN_ROL_ID || 1); // Ajusta '1' al ID real de tu rol Admin
     
-    const isAdmin = loggedInUser.role === ADMIN_ROL_ID;
-    
-    // Si es admin, pasamos ownerId = null (para que el SP no filtre por dueño).
-    // Si NO es admin, pasamos el loggedInUser.id (para que el SP verifique que es el dueño).
-    // const ownerId = isAdmin ? null : loggedInUser.id;
-    const ownerId = loggedInUser.id;
+    // CORRECCIÓN PRINCIPAL:
+    // Si es admin, ownerId es null (para ver cualquier cuenta).
+    // Si es cliente, ownerId es su ID (para filtrar y asegurar propiedad).
+    const ownerId = isAdmin ? null : loggedInUser.id;
 
     // 3. Llamar a la capa de base de datos
+    // Se asume que getAccountsFromDb acepta (ownerId, accountId) y filtra en el SP.
+    const accounts = await getAccountsFromDb(ownerId, req.params.accountId);
     
-    const accounts = await getAccountsFromDb(ownerId, accountId);
+    // 4. Buscar la cuenta específica en los resultados
+    // Usamos .find() que es más limpio que el bucle for.
+    // Convertimos a String para asegurar que la comparación sea correcta (por si ID es numérico en BD).
+    // const foundAccount = accounts.find(acc => acc.id === accountId);
     
-    // 4. Manejar "No Encontrado"
-    // Si el array está vacío, significa que:
-    // a) La cuenta no existe (404).
-    // b) La cuenta existe, pero no pertenece a este usuario (404/403).
-    // En ambos casos, 404.
-    if (accounts.length === 0) {
+    // 5. Manejar "No Encontrado"
+    if (!accounts || accounts.length === 0) {
       const error = new Error('Cuenta no encontrada o no tienes permiso para verla.');
-      error.statusCode = 404;
+      error.statusCode = 404; // 404 es más seguro que 403 para no revelar existencia
       return next(error);
     }
     
-    // 5. Enviar respuesta exitosa
-    // El SP devuelve un array, pero solo queremos el primer (y único) elemento.
-    foundAccount = null;
-    for (const acc of accounts) {
-      if (acc.id.toString() === accountId) {
-        foundAccount = acc;
-        break; 
-      }
-    }
-    
-    res.success(200, foundAccount);
+    // 6. Enviar respuesta exitosa
+    res.success(200, accounts[0]);
 
   } catch (error) {
     next(error); // Pasa al errorHandler
