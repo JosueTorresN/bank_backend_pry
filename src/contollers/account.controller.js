@@ -3,8 +3,9 @@ import { createAccountInDb, getAccountsFromDb, setAccountStatusInDb, getAccountM
 
 
 const ESTADO_CUENTA_ACTIVA_ID = '30000000-0000-0000-0000-000000000001';
-const PAIS_CODIGO = 'CR'; // Código de Costa Rica para el IBAN
-const BANCO_CODIGO = '0123'; // Código simulado de tu banco
+const PAIS_CODIGO = 'CR';
+const ID_INTERNO = '01'; // Requisito obligatorio según columna 2
+const BANCO_CODIGO = 'B05'; // Asumiendo que 05 es tu ID de banco
 const CLIENTE_ROL_ID = '10000000-0000-0000-0000-000000000002';
 const ADMIN_ROL_ID = '10000000-0000-0000-0000-000000000001'
 
@@ -13,9 +14,13 @@ const ADMIN_ROL_ID = '10000000-0000-0000-0000-000000000001'
  * En un sistema real, esto sería mucho más complejo y validado.
  */
 const generateIban = () => {
-  const numeroCuenta = crypto.randomBytes(8).toString('hex'); // 16 chars
-  const checkDigits = '00'; // Dígitos de control (se calcularían)
-  return `${PAIS_CODIGO}${checkDigits}${BANCO_CODIGO}${numeroCuenta}`.toUpperCase();
+  // Generar exactamente 12 dígitos numéricos
+  let numeroCuenta = '';
+  while (numeroCuenta.length < 12) {
+    numeroCuenta += crypto.randomInt(0, 10).toString();
+  }
+  const checkDigits = '000'; 
+  return `${PAIS_CODIGO}${checkDigits}${ID_INTERNO}${BANCO_CODIGO}${numeroCuenta}`;
 };
 
 /**
