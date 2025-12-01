@@ -173,7 +173,6 @@ const setAccountStatus = async (req, res, next) => {
     //30000000-0000-0000-0000-000000000001 activa
     //30000000-0000-0000-0000-000000000002 bloqueda
     //30000000-0000-0000-0000-000000000003 cerrada
-        console.log('Perro hpt')
   try {
     // 1. Obtener datos
     // La ruta es /:accountId/status
