@@ -1,4 +1,6 @@
 import { createInternalTransferInDb } from '../db.controllers/transfer.db.controller.js';
+import { sendTransferIntent } from '../services/socket.service.js';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * Controlador para crear una transferencia interna.

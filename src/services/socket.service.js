@@ -1,33 +1,23 @@
 import { io } from 'socket.io-client';
 import {
-    createInternalTransferInDb,
-    createInterbankTransactionInDb,
     reserveFundsInDb,
     registerIncomingPendingInDb,
     confirmDebitInDb,
     finalizeTransactionInDb,
     rollbackTransactionInDb
-} from '../db.controllers/transfer.db.controller.js'; // Importamos las funciones de BD
-
-const db = {
-    createInternalTransferInDb,
-    createInterbankTransactionInDb,
-    reserveFundsInDb,
-    registerIncomingPendingInDb,
-    confirmDebitInDb,
-    finalizeTransactionInDb,
-    rollbackTransactionInDb
-};
+} from '../db.controllers/transfer.db.controller.js';
 
 // CONFIGURACIÓN
 const CENTRAL_BANK_URL = 'http://137.184.36.3:6000';
-const MY_BANK_ID = 'B05'; // TU CÓDIGO DE BANCO
+const MY_BANK_ID = 'B05'; 
 const MY_BANK_NAME = 'Bancrap';
-const TOKEN = 'BANK-CENTRAL-IC8057-2025';
+const TOKEN = 'BANK-CENTRAL-IC8057-2025'; // Asegúrate que este token sea el correcto para TU banco si es requerido
 
 let socket;
 
 export const initSocket = () => {
+  if (socket) return; // Evitar reinicializaciones
+
   socket = io(CENTRAL_BANK_URL, {
     transports: ['websocket'],
     auth: {
@@ -46,27 +36,26 @@ export const initSocket = () => {
   });
 
   // ================================================================
-  // MANEJO DE EVENTOS ENTRANTES (Rol: Banco Origen o Destino)
+  [cite_start]// 1. RESERVE (Rol: Banco Origen) [cite: 242]
+  // El Banco Central nos pide reservar fondos para una transacción que NOSOTROS iniciamos.
   // ================================================================
-
-  // 1. RESERVE (Rol: Origen) - Congelar fondos [cite: 242]
   socket.on('transfer.reserve', async (payload) => {
     console.log('📩 Evento Recibido: transfer.reserve', payload);
-    const { id, amount, from } = payload.data; // Nota: El PDF no lista 'amount' en data de reserve explícitamente, pero es necesario. Asumimos que viene o lo tomamos de la BD local si guardamos el intent.
-    // Ajuste: Según PDF p.10, el data solo trae {id}. El monto debe buscarse en BD local por ese ID si se guardó previamente, 
-    // O confiar en que el Banco Central envía el contexto. 
-    // *Para este ejemplo, asumiremos que recibimos los datos necesarios o los buscamos.*
+    const { id } = payload.data; 
 
     try {
-      // Llamada a BD para reservar fondos
-      await db.reserveFundsInDb(id, from, amount); 
+      // CORRECCIÓN: No dependemos de recibir 'amount' o 'from' en el payload.
+      // Usamos el ID para que la BD busque la transacción que guardamos en el controller,
+      // verifique el saldo y la marque como RESERVED.
+      await reserveFundsInDb(id); 
       
-      // Respuesta de éxito
+      // Respuesta de éxito al Banco Central
       socket.emit('transfer.reserve.result', {
         type: 'transfer.reserve.result',
         data: { id, ok: true }
       });
     } catch (error) {
+      console.error(`Error reservando fondos ${id}:`, error.message);
       // Respuesta de error (Fondos insuficientes, etc.)
       socket.emit('transfer.reserve.result', {
         type: 'transfer.reserve.result',
@@ -75,39 +64,50 @@ export const initSocket = () => {
     }
   });
 
-  // 2. CREDIT (Rol: Destino) - Acreditar temporalmente [cite: 280]
+  // ================================================================
+  [cite_start]// 2. CREDIT (Rol: Banco Destino) [cite: 280]
+  // Alguien nos está enviando dinero. Debemos ver si la cuenta existe y acreditar temporalmente.
+  // ================================================================
   socket.on('transfer.credit', async (payload) => {
     console.log('📩 Evento Recibido: transfer.credit', payload);
-    const { id, to, amount, currency } = payload.data;
+    // Aquí SÍ necesitamos los datos porque es una transacción nueva para nosotros (destino)
+    const { id, to, amount, currency, from } = payload.data; 
 
     try {
-      await db.registerIncomingPendingInDb(id, to, amount, currency);
+      // Registramos la entrada pendiente
+      await registerIncomingPendingInDb({ transactionId: id, toAccount: to, amount, currency, fromAccount: from });
       
       socket.emit('transfer.credit.result', {
         type: 'transfer.credit.result',
         data: { id, ok: true }
       });
     } catch (error) {
+      console.error(`Error en credit ${id}:`, error.message);
       socket.emit('transfer.credit.result', {
         type: 'transfer.credit.result',
-        data: { id, ok: false, reason: 'CREDIT_FAILED' }
+        data: { id, ok: false, reason: 'CREDIT_FAILED' } // Puede ser ACCOUNT_NOT_FOUND, etc.
       });
     }
   });
 
-  // 3. DEBIT (Rol: Origen) - Confirmar débito [cite: 313]
+  // ================================================================
+  [cite_start]// 3. DEBIT (Rol: Banco Origen) [cite: 313]
+  // El destino aceptó. Confirmamos el débito real en nuestra BD.
+  // ================================================================
   socket.on('transfer.debit', async (payload) => {
     console.log('📩 Evento Recibido: transfer.debit', payload);
     const { id } = payload.data;
 
     try {
-      await db.confirmDebitInDb(id);
+      await confirmDebitInDb(id);
       
       socket.emit('transfer.debit.result', {
         type: 'transfer.debit.result',
         data: { id, ok: true }
       });
     } catch (error) {
+      console.error(`Error en debit ${id}:`, error.message);
+      // Esto es grave (falló debitar después de reservar), generaría un rollback
       socket.emit('transfer.debit.result', {
         type: 'transfer.debit.result',
         data: { id, ok: false, reason: 'DEBIT_FAILED' }
@@ -115,35 +115,40 @@ export const initSocket = () => {
     }
   });
 
-  // 4. COMMIT (Ambos) - Finalizar transacción [cite: 356]
+  // 4. COMMIT y 5. ROLLBACK se mantienen igual que tu código original
+  // Solo asegúrate de manejar errores dentro de ellos por si acaso.
   socket.on('transfer.commit', async (payload) => {
-    console.log('✅ Transacción Exitosa: transfer.commit', payload);
-    await db.finalizeTransactionInDb(payload.data.id, 'COMMITTED');
+    console.log('✅ COMMIT:', payload);
+    try { await finalizeTransactionInDb(payload.data.id, 'COMMITTED'); } 
+    catch(e) { console.error("Error en commit DB", e); }
   });
 
-  // 5. ROLLBACK (Ambos) - Revertir [cite: 344]
   socket.on('transfer.rollback', async (payload) => {
-    console.log('⚠️ Revertir Transacción: transfer.rollback', payload);
-    await db.rollbackTransactionInDb(payload.data.id);
+    console.log('⚠️ ROLLBACK:', payload);
+    try { await rollbackTransactionInDb(payload.data.id); } 
+    catch(e) { console.error("Error en rollback DB", e); }
   });
-  
-  // 6. REJECT (Ambos) - Rechazo inicial [cite: 374]
+
   socket.on('transfer.reject', async (payload) => {
-     console.error('⛔ Transacción Rechazada: transfer.reject', payload);
-     await db.finalizeTransactionInDb(payload.data.id, 'REJECTED', payload.data.reason);
+     console.error('⛔ REJECT:', payload);
+     try { await finalizeTransactionInDb(payload.data.id, 'REJECTED', payload.data.reason); } 
+     catch(e) { console.error("Error en reject DB", e); }
   });
 };
 
-// Función para iniciar el flujo (Intent) desde el Controller
+// ... (sendTransferIntent se mantiene igual) ...
 export const sendTransferIntent = (transferData) => {
-  if (!socket) throw new Error('Socket no inicializado');
+  if (!socket) {
+      console.error("⚠️ Socket no inicializado. Llamando a initSocket()...");
+      initSocket(); // Intento de autorecuperación
+  }
   
   const payload = {
     type: 'transfer.intent',
     data: {
-      id: transferData.transactionId, // UUID generado en backend
-      from: transferData.fromAccountId, // IBAN Origen
-      to: transferData.toAccountId,     // IBAN Destino
+      id: transferData.transactionId, 
+      from: transferData.fromAccountId, 
+      to: transferData.toAccountId,     
       amount: transferData.amount,
       currency: transferData.currency
     }
