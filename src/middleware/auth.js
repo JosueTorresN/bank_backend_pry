@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 import config from '../config/sentings.js';
 
 const verifyToken = (req, res, next) => {
-  const token = req.headers['authorization']?.split(' ')[1]; // Formato: Bearer TOKEN
+  const token = req.headers['authorization']?.split(' ')[1];
 
   if (!token) {
     const error = new Error('Forbidden: No token provided');
@@ -18,7 +18,7 @@ const verifyToken = (req, res, next) => {
       error.statusCode = 403;
       return next(error);
     }
-    req.user = decoded; // Añade el payload del token (id, role) al objeto request
+    req.user = decoded;
     next();
   });
 };

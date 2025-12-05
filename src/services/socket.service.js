@@ -7,17 +7,16 @@ import {
     rollbackTransactionInDb
 } from '../db.controllers/transfer.db.controller.js';
 
-// CONFIGURACIÓN
+
 const CENTRAL_BANK_URL = 'http://137.184.36.3:6000';
 const MY_BANK_ID = 'B05'; 
 const MY_BANK_NAME = 'Bancrap';
-const TOKEN = 'BANK-CENTRAL-IC8057-2025'; // Asegúrate que este token sea el correcto para TU banco si es requerido
+const TOKEN = 'BANK-CENTRAL-IC8057-2025'; 
 
 let socket;
 
 export const initSocket = () => {
-  if (socket) return; // Evitar reinicializaciones
-
+  if (socket) return; 
   socket = io(CENTRAL_BANK_URL, {
     transports: ['websocket'],
     auth: {
@@ -35,18 +34,12 @@ export const initSocket = () => {
     console.log('❌ Desconectado del Banco Central');
   });
 
-  // ================================================================
-  [cite_start]// 1. RESERVE (Rol: Banco Origen) [cite: 242]
-  // El Banco Central nos pide reservar fondos para una transacción que NOSOTROS iniciamos.
-  // ================================================================
   socket.on('transfer.reserve', async (payload) => {
     console.log('📩 Evento Recibido: transfer.reserve', payload);
     const { id } = payload.data; 
 
     try {
-      // CORRECCIÓN: No dependemos de recibir 'amount' o 'from' en el payload.
-      // Usamos el ID para que la BD busque la transacción que guardamos en el controller,
-      // verifique el saldo y la marque como RESERVED.
+
       await reserveFundsInDb(id); 
       
       // Respuesta de éxito al Banco Central
@@ -64,13 +57,8 @@ export const initSocket = () => {
     }
   });
 
-  // ================================================================
-  [cite_start]// 2. CREDIT (Rol: Banco Destino) [cite: 280]
-  // Alguien nos está enviando dinero. Debemos ver si la cuenta existe y acreditar temporalmente.
-  // ================================================================
   socket.on('transfer.credit', async (payload) => {
     console.log('📩 Evento Recibido: transfer.credit', payload);
-    // Aquí SÍ necesitamos los datos porque es una transacción nueva para nosotros (destino)
     const { id, to, amount, currency, from } = payload.data; 
 
     try {
@@ -85,15 +73,11 @@ export const initSocket = () => {
       console.error(`Error en credit ${id}:`, error.message);
       socket.emit('transfer.credit.result', {
         type: 'transfer.credit.result',
-        data: { id, ok: false, reason: 'CREDIT_FAILED' } // Puede ser ACCOUNT_NOT_FOUND, etc.
+        data: { id, ok: false, reason: 'CREDIT_FAILED' }
       });
     }
   });
 
-  // ================================================================
-  [cite_start]// 3. DEBIT (Rol: Banco Origen) [cite: 313]
-  // El destino aceptó. Confirmamos el débito real en nuestra BD.
-  // ================================================================
   socket.on('transfer.debit', async (payload) => {
     console.log('📩 Evento Recibido: transfer.debit', payload);
     const { id } = payload.data;
@@ -107,7 +91,7 @@ export const initSocket = () => {
       });
     } catch (error) {
       console.error(`Error en debit ${id}:`, error.message);
-      // Esto es grave (falló debitar después de reservar), generaría un rollback
+
       socket.emit('transfer.debit.result', {
         type: 'transfer.debit.result',
         data: { id, ok: false, reason: 'DEBIT_FAILED' }
@@ -115,8 +99,7 @@ export const initSocket = () => {
     }
   });
 
-  // 4. COMMIT y 5. ROLLBACK se mantienen igual que tu código original
-  // Solo asegúrate de manejar errores dentro de ellos por si acaso.
+
   socket.on('transfer.commit', async (payload) => {
     console.log('✅ COMMIT:', payload);
     try { await finalizeTransactionInDb(payload.data.id, 'COMMITTED'); } 
@@ -136,7 +119,6 @@ export const initSocket = () => {
   });
 };
 
-// ... (sendTransferIntent se mantiene igual) ...
 export const sendTransferIntent = (transferData) => {
   if (!socket) {
       console.error("⚠️ Socket no inicializado. Llamando a initSocket()...");

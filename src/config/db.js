@@ -1,5 +1,5 @@
-import 'dotenv/config'; // Carga las variables de entorno
-import { Pool } from 'pg'; // <-- 1. CAMBIO: 'require' se reemplaza por 'import'
+import 'dotenv/config';
+import { Pool } from 'pg';
 
 // Configuración de la conexión a la base de datos
 const dbConfig = {
@@ -51,14 +51,3 @@ export const callSP = (spName, params = []) => {
 
 // Exporta el pool directamente si algo más necesita usarlo
 export { pool };
-
-// --- 2. CAMBIO: 'module.exports' se reemplaza por 'export' ---
-// (He movido los 'export' para que estén en línea con cada función,
-//  lo cual es más común en ESM, pero también podrías hacer esto al final)
-/*
-export {
-  query,
-  callSP, 
-  pool, 
-};
-*/

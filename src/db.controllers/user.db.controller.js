@@ -27,9 +27,6 @@ export const createUserInDb = async (userData) => {
     return rows[0].sp_users_create;
 
   } catch (error) {
-    // Si el SP lanza un RAISE EXCEPTION (ej: "Correo ya registrado"),
-    // el error será capturado aquí. Lo relanzamos para que
-    // el controlador principal lo maneje y envíe un 4xx.
     console.error('Error en sp_users_create:', error.message);
     throw error;
   }
@@ -103,8 +100,6 @@ export const deleteUserInDb = async (userId) => {
     return rows[0].sp_users_delete;
 
   } catch (error) {
-    // Si hay un error (ej: violación de llave foránea si el SP no manejara cascada)
-    // lo relanzamos para que el controlador principal lo maneje.
     console.error('Error en sp_users_delete:', error.message);
     throw error;
   }

@@ -131,8 +131,6 @@ const updateUser = async (req, res, next) => {
     }
 
     // 3. Lógica de Negocio: Seguridad de Roles
-    // Si el que hace la petición NO es admin, borramos el campo 'rol' del body.
-    // Esto evita que un usuario normal se "promocione" a sí mismo a admin.
     if (!isAdmin) {
       delete updateData.rol;
     }
@@ -198,7 +196,7 @@ const deleteUser = async (req, res, next) => {
 
     // 5. Manejar respuesta
     if (!success) {
-      // El SP devolvió 'false' (WHERE id = p_user_id no encontró al usuario)
+      // El SP devolvió 'false'
       const error = new Error('Usuario no encontrado.');
       error.statusCode = 404;
       return next(error);

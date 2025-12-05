@@ -84,7 +84,7 @@ const createInterbankTransfer = async (req, res, next) => {
        throw error;
     }
 
-    // Identificar si es interbancaria (El PDF dice verificar código de banco BXX)
+    // Identificar si es interbancaria
     // Se asume que el frontend llama a este endpoint específicamente para eso.
 
     // 1. Generar ID único para la transacción (Requerido por WebSocket)
@@ -101,15 +101,12 @@ const createInterbankTransfer = async (req, res, next) => {
       userId
     };
 
-    // 3. Registrar "Intento" en BD local (Estado: PENDING_INTENT)
-    // Esto es crucial para tener registro antes de hablar con el socket
-    // await createInterbankTransactionInDb(transferData);
+    // 3. Registrar "Intento" en BD local
 
-    // 4. Emitir evento WebSocket al Banco Central [cite: 224]
+    // 4. Emitir evento WebSocket al Banco Central
     sendTransferIntent(transferData);
 
     // 5. Responder al Frontend
-    // Nota: La transacción NO ha terminado. Respondemos que está "En proceso".
     // El frontend debe mostrar un loader o escuchar updates.
     res.success(202, {
       message: 'Transferencia iniciada. Procesando con Banco Central...',

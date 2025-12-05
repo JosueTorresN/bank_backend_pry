@@ -23,7 +23,7 @@ export const createAccountInDb = async (accountData) => {
     return rows[0].sp_accounts_create;
 
   } catch (error) {
-    // Si el SP lanza un error (ej: IBAN duplicado, si tuvieras esa restricción)
+    // Si el SP lanza un error
     // lo relanzamos para que el controlador principal lo maneje.
     console.error('Error en sp_accounts_create:', error.message);
     throw error;

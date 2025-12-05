@@ -38,17 +38,13 @@ const login = async (req, res, next) => {
     const tokenPayload = { id: user.user_id, role: user.rol };
     const token = jwt.sign(tokenPayload, config.JWT_SECRET, { expiresIn: '1h' });
     console.log('Generated token:', token);
-
-    // Asumo que tienes un middleware 'res.success'
+    // 5. Envía la respuesta con el token
     res.success(200, { token }); 
     
   } catch (error) {
-    // Si findUserForLogin falla, o cualquier otra cosa, 'next' lo captura
     next(error);
   }
 };
-
-// En: src/controllers/auth.controller.js
 
 const forgotPassword = async (req, res, next) => {
   const { email } = req.body;
@@ -97,7 +93,6 @@ const forgotPassword = async (req, res, next) => {
 };
 
 const verifyOtp = async (req, res, next) => {
-  // Asumo que el body enviará el email, el OTP (texto plano) y el propósito
   const { email, otp, purpose } = req.body;
 
   try {
@@ -109,13 +104,13 @@ const verifyOtp = async (req, res, next) => {
       return next(error);
     }
 
-    // 2. Hashear el OTP (con SHA256 para que coincida con el SP)
+    // 2. Hashear el OTP
     const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex');
 
     // 3. Intentar consumir el OTP
     const isSuccess = await consumeOtp(
       user.user_id,
-      purpose, // Ej: 'recuperacion'
+      purpose,
       hashedOtp
     );
 

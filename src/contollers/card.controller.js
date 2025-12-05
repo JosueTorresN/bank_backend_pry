@@ -48,9 +48,6 @@ const createCard = async (req, res, next) => {
     const pin = generatePin();
     const expDate = generateExpDate();
 
-    // 5. Lógica de Negocio: ¡CIFRAR en lugar de Hashear!
-    // const cvv_hash = await bcrypt.hash(cvv, SALT_ROUNDS); // <- NO USAR ESTO
-    // const pin_hash = await bcrypt.hash(pin, SALT_ROUNDS); // <- NO USAR ESTO
 
     const cvv_encrypted = encrypt(cvv);
     const pin_encrypted = encrypt(pin);
@@ -68,7 +65,7 @@ const createCard = async (req, res, next) => {
       saldo_actual: 0.00
     };
     
-    // ... (pasos 7-8: llamar a createCardInDb y enviar respuesta)
+    // 7. Llamar a la capa de base de datos
     const newCardId = await createCardInDb(cardData);
     res.success(201, {
       message: 'Tarjeta creada exitosamente.',
@@ -147,7 +144,6 @@ const getCardById = async (req, res, next) => {
     // const ownerId = isAdmin ? null : loggedInUser.id;
 
     // 3. Llamar a la capa de base de datos
-    // Esta vez, proveemos AMBOS parámetros al SP.
     // const cards = await getCardsFromDb(ownerId, cardId);
     const cards = await getCardsFromDb(loggedInUser, cardId);
 
@@ -182,7 +178,6 @@ const getCardMovements = async (req, res, next) => {
     const loggedInUser = req.user;     // Usuario logueado (del JWT)
 
     // 2. Lógica de Autorización: "solo admin o cliente dueño"
-    // Reutilizamos la lógica de getCardById para validar permisos.
     // const isAdmin = loggedInUser.role === ADMIN_ROL_ID;
     // const ownerId = isAdmin ? null : loggedInUser.id;
     const ownerId = loggedInUser.id;
@@ -255,8 +250,6 @@ const addCardMovement = async (req, res, next) => {
     const { tipo, descripcion, moneda, monto } = req.body;
 
     // 2. Autorización (Paso 1: Dueño o Admin)
-    // const isAdmin = loggedInUser.role === ADMIN_ROL_ID || null;
-    // const ownerId = isAdmin ? null : loggedInUser.id;
     const ownerId = loggedInUser.id;
     
     // Reutilizamos getCardsFromDb para validar permisos
@@ -357,7 +350,6 @@ const requestPinCvvOtp = async (req, res, next) => {
     const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex');
     
     // 5. Definir parámetros del OTP
-    // ¡ASEGÚRATE DE AÑADIR 'ver_pin_cvv' A TU ENUM 'proposito_otp' EN LA BD!
     const otpPurpose = 'card_details'; 
     const expiresInSeconds = 300; // 5 minutos
 

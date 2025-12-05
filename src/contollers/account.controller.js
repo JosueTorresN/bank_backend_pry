@@ -14,7 +14,6 @@ const ADMIN_ROL_ID = '10000000-0000-0000-0000-000000000001'
  * En un sistema real, esto sería mucho más complejo y validado.
  */
 const generateIban = () => {
-  // El PDF exige "Resto de la cuenta: exactamente 12 dígitos numéricos" 
   let numeroCuenta = '';
   while (numeroCuenta.length < 12) {
     numeroCuenta += crypto.randomInt(0, 10).toString();
@@ -139,27 +138,22 @@ const getAccountById = async (req, res, next) => {
     const loggedInUser = req.user;            // Usuario logueado (del JWT)
 
     // 2. Lógica de Autorización: "solo admin o cliente dueño"
-    // Asegúrate de tener importada o definida la constante ADMIN_ROL_ID
-    const isAdmin = loggedInUser.role === (global.ADMIN_ROL_ID || 1); // Ajusta '1' al ID real de tu rol Admin
+    const isAdmin = loggedInUser.role === (global.ADMIN_ROL_ID || 1);
     
-    // CORRECCIÓN PRINCIPAL:
     // Si es admin, ownerId es null (para ver cualquier cuenta).
-    // Si es cliente, ownerId es su ID (para filtrar y asegurar propiedad).
     const ownerId = isAdmin ? null : loggedInUser.id;
 
     // 3. Llamar a la capa de base de datos
-    // Se asume que getAccountsFromDb acepta (ownerId, accountId) y filtra en el SP.
     const accounts = await getAccountsFromDb(ownerId, req.params.accountId);
     
     // 4. Buscar la cuenta específica en los resultados
-    // Usamos .find() que es más limpio que el bucle for.
-    // Convertimos a String para asegurar que la comparación sea correcta (por si ID es numérico en BD).
+    // Convertimos a String para asegurar que la comparación sea correcta
     // const foundAccount = accounts.find(acc => acc.id === accountId);
     
     // 5. Manejar "No Encontrado"
     if (!accounts || accounts.length === 0) {
       const error = new Error('Cuenta no encontrada o no tienes permiso para verla.');
-      error.statusCode = 404; // 404 es más seguro que 403 para no revelar existencia
+      error.statusCode = 404;
       return next(error);
     }
     
@@ -235,7 +229,6 @@ const getAccountMovements = async (req, res, next) => {
     const loggedInUser = req.user;        // Usuario logueado (del JWT)
 
     // 2. Lógica de Autorización: "solo admin o cliente dueño"
-    // Reutilizamos la lógica de getAccountById para validar permisos.
     const isAdmin = loggedInUser.role === ADMIN_ROL_ID;
     const ownerId = isAdmin ? null : loggedInUser.id;
     

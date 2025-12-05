@@ -1,4 +1,4 @@
-// users.routes.js (o un controlador asociado)
+// users.routes.js
 
 import { Router } from 'express';
 const router = Router();
