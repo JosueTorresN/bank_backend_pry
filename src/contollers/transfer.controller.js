@@ -101,7 +101,7 @@ const createInterbankTransfer = async (req, res, next) => {
 
     // 3. Registrar "Intento" en BD local (Estado: PENDING_INTENT)
     // Esto es crucial para tener registro antes de hablar con el socket
-    await createInterbankTransactionInDb(transferData);
+    // await createInterbankTransactionInDb(transferData);
 
     // 4. Emitir evento WebSocket al Banco Central [cite: 224]
     sendTransferIntent(transferData);
