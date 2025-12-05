@@ -14,13 +14,14 @@ const ADMIN_ROL_ID = '10000000-0000-0000-0000-000000000001'
  * En un sistema real, esto sería mucho más complejo y validado.
  */
 const generateIban = () => {
-  // Generar exactamente 12 dígitos numéricos
+  // El PDF exige "Resto de la cuenta: exactamente 12 dígitos numéricos" 
   let numeroCuenta = '';
   while (numeroCuenta.length < 12) {
     numeroCuenta += crypto.randomInt(0, 10).toString();
   }
-  const checkDigits = '000'; 
-  return `${PAIS_CODIGO}${checkDigits}${ID_INTERNO}${BANCO_CODIGO}${numeroCuenta}`;
+  
+  // Estructura: CR + 01 + B05 + 123456789012
+  return `${PAIS_CODIGO}${ID_INTERNO}${BANCO_CODIGO}${numeroCuenta}`;
 };
 
 /**

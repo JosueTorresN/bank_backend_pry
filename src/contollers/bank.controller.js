@@ -12,7 +12,7 @@ const validateAccount = async (req, res, next) => {
     const { iban } = req.body;
 
     // 2. Validación de Entrada
-    const IBAN_REGEX = /^CR\d{2}[A-Z0-9]{18}$/;
+    const IBAN_REGEX = /^CR01B\d{14}$/;;
 
     if (!iban || !IBAN_REGEX.test(iban)) {
       return res.status(400).json({
