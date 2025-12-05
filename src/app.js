@@ -21,6 +21,7 @@ app.use(cors({
     'Content-Type',
     'Accept',
     'x-api-key',
+    'X-API-TOKEN',
     'Authorization'
   ],
   exposedHeaders: [
